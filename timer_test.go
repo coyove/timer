@@ -16,18 +16,19 @@ func TestBench(t *testing.T) {
 		time.AfterFunc(time.Duration(rand.Intn(100))*time.Millisecond, func() {
 			var sum, c int64
 			start := time.Now().UnixNano()
-			SetInterval(func() bool {
+			var handle *Job
+			handle, _ = SetInterval(func() {
 				now := time.Now().UnixNano()
 				sum += now - start
 				c++
 				start = now
 				if c < 400 {
-					return true
+					return
 				}
 				ss.Add(sum)
 				cc.Add(c)
 				ii.Add(1)
-				return false
+				ClearInterval(handle)
 			}, 20e6)
 		})
 	}
