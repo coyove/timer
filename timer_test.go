@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestBench(t *testing.T) {
+func TestInterval(t *testing.T) {
 	const N = 1e4
 	var ss, cc, ii atomic.Int64
 	for i := 0; i < N; i++ {
@@ -42,4 +42,29 @@ func TestBench(t *testing.T) {
 		t.Fatal(ai)
 	}
 	t.Log("interval=", ai)
+}
+
+func TestTimeout(t *testing.T) {
+	const N = 1e4
+	var sum, ii atomic.Int64
+	for i := 0; i < N; i++ {
+		time.AfterFunc(time.Duration(rand.Intn(100))*time.Millisecond, func() {
+			start := time.Now().UnixNano()
+			SetTimeout(func() {
+				now := time.Now().UnixNano()
+				sum.Add(now - start)
+				ii.Add(1)
+			}, time.Second)
+		})
+	}
+	for ii.Load() != N {
+		time.Sleep(time.Second)
+		fmt.Println(ii.Load(), "total jobs:", TotalJobs())
+	}
+
+	if diff := math.Abs((float64(sum.Load())/N - 1e9) / 1e9); diff > 0.01 {
+		t.Fatal(diff)
+	}
+
+	t.Log(TotalJobs())
 }

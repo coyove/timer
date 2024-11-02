@@ -26,16 +26,34 @@ func SetInterval(f func(), interval time.Duration) (*Job, error) {
 	if interval <= 0 {
 		return nil, fmt.Errorf("invalid interval: %v", interval)
 	}
-	j, err := createJob(f, interval)
+	j, err := createJob(f, interval, false)
 	if err == nil {
 		jobsCtr.Add(1)
 	}
 	return j, err
 }
 
+func SetTimeout(f func(), timeout time.Duration) (*Job, error) {
+	if timeout <= 0 {
+		return nil, fmt.Errorf("invalid timeout: %v", timeout)
+	}
+	j, err := createJob(f, timeout, true)
+	if err == nil {
+		jobsCtr.Add(1)
+	}
+	return j, err
+}
+
+func (j *Job) Abort() {
+	atomic.StoreInt32(&j.dead, 1)
+}
+
 func ClearInterval(j *Job) {
-	jobsCtr.Add(-1)
-	atomic.StoreInt64(&j.dead, 1)
+	j.Abort()
+}
+
+func ClearTimeout(j *Job) {
+	j.Abort()
 }
 
 func TotalJobs() int {

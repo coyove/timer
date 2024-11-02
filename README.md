@@ -1,1 +1,1 @@
-timer implements `SetInterval(callback, interval)` and `CleatInterval(handle)` in golang using epoll, it doesn't spawn new goroutines.
+timer implements `SetInterval(callback, interval)` and `SetTimeout(callback, timeout)` in golang using epoll, it doesn't spawn new goroutines.

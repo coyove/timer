@@ -11,8 +11,8 @@ import (
 
 type Job struct {
 	fd       int
-	i        int64
-	dead     int64
+	dead     int32
+	onetime  bool
 	callback func()
 }
 
@@ -55,7 +55,15 @@ func init() {
 				eps[i].mu.Lock()
 				for _, ev := range res {
 					j := eps[i].callbacks[int(ev.Fd)]
-					if atomic.LoadInt64(&j.dead) == 1 {
+					switch {
+					case atomic.LoadInt32(&j.dead) == 0:
+						j.callback()
+						if !j.onetime {
+							break
+						}
+						fallthrough
+					default:
+						jobsCtr.Add(-1)
 						delete(eps[i].callbacks, j.fd)
 						if err := syscall.EpollCtl(epfd, syscall.EPOLL_CTL_DEL, j.fd, nil); err != nil {
 							OnError(err)
@@ -63,8 +71,6 @@ func init() {
 						if err := syscall.Close(j.fd); err != nil {
 							OnError(err)
 						}
-					} else {
-						j.callback()
 					}
 				}
 				eps[i].mu.Unlock()
@@ -73,7 +79,7 @@ func init() {
 	}
 }
 
-func createJob(f func(), interval time.Duration) (*Job, error) {
+func createJob(f func(), interval time.Duration, onetime bool) (*Job, error) {
 	fd, _, err := syscall.RawSyscall(0x11b, 1, 0, 0)
 	if err != syscall.Errno(0) {
 		return nil, err
@@ -84,8 +90,11 @@ func createJob(f func(), interval time.Duration) (*Job, error) {
 		it_value    syscall.Timespec
 	}
 
-	itimer.it_value.Nsec = interval.Nanoseconds()
-	itimer.it_interval.Nsec = interval.Nanoseconds()
+	nano := interval.Nanoseconds()
+	sec := nano / 1e9
+	itimer.it_value.Sec = sec
+	itimer.it_value.Nsec = nano % 1e9
+	itimer.it_interval = itimer.it_value
 
 	_, _, err = syscall.RawSyscall6(0x11e, fd, 0, uintptr(unsafe.Pointer(&itimer)), 0, 0, 0)
 	if err != syscall.Errno(0) {
@@ -95,10 +104,10 @@ func createJob(f func(), interval time.Duration) (*Job, error) {
 
 	j := &Job{
 		callback: f,
-		i:        epi.Add(1) % int64(len(eps)),
 		fd:       int(fd),
+		onetime:  onetime,
 	}
-	ep := &eps[j.i]
+	ep := &eps[epi.Add(1)%int64(len(eps))]
 	ep.mu.Lock()
 	ep.callbacks[int(fd)] = j
 	ep.mu.Unlock()
